@@ -1,0 +1,180 @@
+---
+title: "Is an Automatic or Manual Transmission Better for Vehicle MPG?"
+author: "Jeff Spoelstra"
+date: '2016-05-13'
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE,
+                      fig.width=4, fig.height=4, fig.pos="H",
+                      fig.path='mpg-analysis-figures/')
+options(digits=5, scipen=6)
+```
+```{r loadstuff, include=FALSE}
+library(datasets)
+library(dplyr)
+library(ggplot2)
+
+data(mtcars)
+```
+
+## Executive Summary
+
+This report describes an analysis of the mtcars data set in the R datasets package exploring the research question of whether an automatic or manual transmission is better for overall vehicle miles per gallon (mpg) fuel efficiency. The results showed that there is a correlation between mpg and transmission type, but other variables may be better predictors. The appendix at the end of this report contains supporting information.
+
+## Exploratory Data Analysis
+
+The following description of the data set comes from the mtcars codebook.
+
+The mtcars data set consists of eleven attributes (variables) of automobile design and performance for 32 different 1973-1974 model vehicles (observations) of various classes from different manufacturers (domestic U.S. and foreign). The data was compiled from 1974 *Motor Trend* magazine. The variables include miles per gallon, number of cylinders, engine displacement, transmission type, and several others.
+
+Over all of the vehicles, mpg ranges from `r range(mtcars$mpg)[1]` to `r range(mtcars$mpg)[2]`. Of the 32 vehicles, `r sum(mtcars$am)` (`r round(100*sum(mtcars$am)/32,1)`%) have a manual rather than automatic transmission. There are no missing values in the data.
+
+## Hypothesis Testing
+
+The target of the analysis was to find a possible correlation between vehicle tranmission type and mpg. The null hypothesis is that mpg is independent of transmission type. To reject this hypothesis would require evidence of a significant and quantifiable relationship between them.
+
+```{r simple_lm, include=FALSE}
+f1<-lm(formula = mpg ~ am, data = mtcars)
+```
+
+Fitting a simple linear model with mpg as the outcome and transmission type as the only explanatory variable shows a statistically significant relationship with a beta1 coefficient of `r summary(f1)$coefficients[2,1]` and p<0.05 (`r summary(f1)$coefficients[2,4]`). However, the model isn't a particularly good fit with a r-squared value of `r summary(f1)$r.squared` and wide 95% confidence intervals (see below).
+
+```{r conf1, include=TRUE, echo=FALSE}
+confint(f1,level=0.95)
+```
+
+The variances are high as well; `r var(resid(f1)[mtcars$am==0])` for the automatic transmission residuals, `r var(resid(f1)[mtcars$am==1])` for the manual transmission residuals, and `r var(resid(f1))` overall. 
+
+See Figure 1 and Figure 2 in the Appendix for model fit and residuals charts. The sloped blue line on Figure 1 shows the regression line for the model. The horizontal green lines on Figure 2 indicate two standard deviations away from the mean of zero separately for automatic transmission residuals and manual transmission residuals.
+
+```{r all_lm, include=FALSE}
+f2<-lm(formula = mpg ~ am + cyl, data = mtcars)
+f3<-lm(formula = mpg ~ am + cyl + disp, data = mtcars)
+f4<-lm(formula = mpg ~ am + cyl + disp + hp, data = mtcars)
+f5<-lm(formula = mpg ~ am + cyl + disp + hp + drat, data = mtcars)
+f6<-lm(formula = mpg ~ am + cyl + disp + hp + drat + wt, data = mtcars)
+f7<-lm(formula = mpg ~ am + cyl + disp + hp + drat + wt + vs, data = mtcars)
+f8<-lm(formula = mpg ~ am + cyl + disp + hp + drat + wt + vs + gear, data = mtcars)
+f9<-lm(formula = mpg ~ am + cyl + disp + hp + drat + wt + vs + gear + carb, data = mtcars)
+```
+
+Looking at the full set of variables in the data set, there are several that could confound the target relationship, in particular vehicle weight, number of cylinders, engine displacement, engine horsepower, engine design (V-style or straight-line), number of carburators, number of gears in the transmission, and rear differential ratio. In a step-wise manner each variable was added to the model and a new linear model created until all variables were combined in one model; resulting in a total of nine models. An ANOVA analysis was then performed with all the models.
+
+```{r anova, include=FALSE, echo=FALSE}
+anova(f1,f2,f3,f4,f5,f6,f7,f8,f9)
+```
+
+The ANOVA results showed that the best performing model appears to be one with cylinder count included with transmission type. The r-squared value is a more favorable `r summary(f2)$r.squared` as is the overall variance of `r var(resid(f2))`.
+
+However, looking at the p values of the beta coefficients, the value for cylinder count is nearly zero (`r summary(f2)$coefficients[3,4]`) while the value for transmission type is just above 0.05 (`r summary(f2)$coefficients[2,4]`) - thus adding cylinder count has effectively rendered transmission type irrelevant to the model.
+
+Figure 3 in the Appendix shows a chart of the residuals. The horizontal green lines indicate two standard deviations away from the mean of zero for all residuals. Note that there appears to be some grouping affect on the residuals at the left and right ends of the X axis probably induced by the binary nature of the transmission type variable.
+
+```{r cw_lm, include=FALSE}
+fcw<-lm(mpg ~ cyl + wt, data=mtcars)
+```
+
+Further review of the ANOVA results suggests vehicle weight as an important factor, and, in fact, a model relating mpg to just cylinder count and vehicle weight appears to perform best with both beta coefficient p values far below 0.05. Additionally, the r-squared value is higher (`r summary(fcw)$r.squared`), and the residuals variance is lower (`r var(resid(f2))`), than any of the other models tested. The 95% confidence intervals are narrower than the original simple model, too (see below).
+
+```{r confcw, include=TRUE, echo=FALSE}
+confint(fcw,level=0.95)
+```
+
+The confidence interval for cylinder count comes dangerously close to including zero, but a model tested without it (relating mpg to just vehicle weight) performed less well than the model with both variables.
+
+Figure 4 in the Appendix shows a chart of the residuals for this model. The horizontal green lines indicate two standard deviations away from the mean of zero for all residuals. With no binary explanatory variables, the residuals of the best fitting model show a more normal distribution (see Figure 5), albeit a litte skewed; perhaps because the sample of 32 vehicles was not equally distributed across the possible number of cylinders. For example, there are 14 eight-cylinder vehicles in the data, but only 7 six-cylinder vehicles. The vertical green lines on Figure 5 indicate one standard deviation from the mean of zero.
+
+## Conclusion
+
+Based on the results obtained from the simple model of mpg as a function of just transmission type, it is possible to reject the null hypothesis and accept the alternative that mpg is related to transmission type. Even so, using transmission type alone isn't the best model to fit the data, and can, in fact, be eliminated altogether in favor of number of cylinders and vehicle weight instead.
+
+## Appendix
+
+```{r fig1, echo=FALSE}
+# plot the simple model fit
+g <- ggplot(data=mtcars, aes(x=am, y=mpg, fill=factor(am))) +
+     scale_x_continuous(limits=c(-0.5,1.5), breaks=c(0,1), labels=c("Automatic", "Manual")) +
+     geom_boxplot() +
+     geom_abline(slope=summary(f1)$coefficients[2,1], 
+                 intercept=summary(f1)$coefficients[1,1], size=2, color='blue') +
+     labs(title="MPG vs Transmission Type", 
+          x="Transmission Type\n\nFigure 1", y="Miles per Gallon") +
+     theme(legend.position="none", panel.grid.major.x = element_blank())
+print(g)
+```
+
+
+```{r fig2, echo=FALSE}
+sd0<-sd(resid(f1)[mtcars$am==0])        # standard deviation of residuals for manual
+sd1<-sd(resid(f1)[mtcars$am==1])        # standard deviation of residuals for automatic
+
+# plot the residuals vs predictor for the simple model
+g <- ggplot(data=mtcars, aes(x=am, y=resid(f1), color=factor(am))) +
+     scale_x_continuous(limits=c(-0.5,1.5), breaks=c(0,1), labels=c("Automatic", "Manual")) +
+     geom_point() +
+     geom_hline(yintercept=0, size=1) +
+#     geom_hline(yintercept=2*sd(resid(f1)), size=2, color='green') +
+#     geom_hline(yintercept=-2*sd(resid(f1)), size=2, color='green') +
+     annotate("segment", x=-0.5, xend=0.5, y=2*sd0, yend=2*sd0, size=2, color='green') +
+     annotate("segment", x=-0.5, xend=0.5, y=-2*sd0, yend=-2*sd0, size=2, color='green') +
+     annotate("segment", x=0.5, xend=1.5, y=2*sd1, yend=2*sd1, size=2, color='green') +
+     annotate("segment", x=0.5, xend=1.5, y=-2*sd1, yend=-2*sd1, size=2, color='green') +
+     labs(title="MPG vs Transmission Type", 
+          x="Transmission Type\n\nFigure 2", y="Residuals") +
+     theme(legend.position="none", panel.grid.major.x = element_blank())
+print(g)
+```
+
+
+```{r fig3, echo=FALSE}
+sd2<-sd(resid(f2))        # standard deviation of residuals
+
+# plot the residuals vs fitted values for model #2
+g <- ggplot(data=mtcars, aes(x=fitted(f2), y=resid(f2))) +
+     geom_point() +
+     geom_hline(yintercept=0, size=1) +
+     geom_hline(yintercept=2*sd2, size=2, color='green') +
+     geom_hline(yintercept=-2*sd2, size=2, color='green') +
+     labs(title="Residuals vs Fitted Values\nMPG vs Transmission & Cylinders", 
+          x="Fitted Values\n\nFigure 3", y="Residuals") +
+     theme(legend.position="none")
+print(g)
+```
+
+
+```{r fig4, echo=FALSE}
+sdcw<-sd(resid(fcw))        # standard deviation of residuals
+
+# plot the residuals vs fitted values for cyl + wt model
+g <- ggplot(data=mtcars, aes(x=fitted(fcw), y=resid(fcw))) +
+     geom_point() +
+     geom_hline(yintercept=0, size=1) +
+     geom_hline(yintercept=2*sdcw, size=2, color='green') +
+     geom_hline(yintercept=-2*sdcw, size=2, color='green') +
+     labs(title="Residuals vs Fitted Values\nMPG vs Cylinders & Weight", 
+          x="Fitted Values\n\nFigure 4", y="Residuals") +
+     theme(legend.position="none")
+print(g)
+```
+
+
+```{r fig5, echo=FALSE}
+mncw<-mean(resid(fcw))        # mean of residuals
+sdcw<-sd(resid(fcw))          # standard deviation of residuals
+
+nres<-data.frame(x=(resid(fcw) - mncw) / sdcw)
+
+# plot the distribution of residuals vs fitted values for cyl + wt model
+g <- ggplot(data=nres, aes(x=x)) +
+     geom_density() +
+     scale_x_continuous(limits=c(-3.5,3.5), breaks=seq(-3,3,1)) +
+     geom_vline(xintercept=mncw, size=1) +
+     geom_vline(xintercept=sdcw, size=2, color='green') +
+     geom_vline(xintercept=-sdcw, size=2, color='green') +
+     labs(title="Distribution of Residuals\nMPG vs Cylinders & Weight", 
+          x="Normalized Residuals\n\nFigure 5", y="Density") +
+     theme(legend.position="none")
+print(g)
+```
